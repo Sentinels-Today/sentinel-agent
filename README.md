@@ -1,39 +1,53 @@
 # sentinel-agent
 
-**On-device daemon for identity management.**
+**On-device daemon for Sentinel Labs.** Rust library + CLI that generates and persists an Ed25519 device identity, signs attestation claims with a canonical-JSON digest (wire-compatible with [`sentinel-core`](https://github.com/Sentinels-Today/sentinel-core)), and talks to [`sentinel-cloud`](https://github.com/Sentinels-Today/sentinel-cloud).
 
-- Language: Rust
-- License: Apache 2.0
-- Status: Pre-alpha
+[![ci](https://github.com/Sentinels-Today/sentinel-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Sentinels-Today/sentinel-agent/actions/workflows/ci.yml)
+![license](https://img.shields.io/badge/license-Apache--2.0-blue)
+![rust](https://img.shields.io/badge/rust-1.75%2B-orange)
 
-## Overview
+## CLI
 
-A lightweight daemon that runs on the robot controller, managing device identity, telemetry signing, firmware updates, and secure communication with the cloud.
+```sh
+cargo install --path .
 
-## About Sentinel Labs
+sentinel-agent whoami
+sentinel-agent register --cloud http://localhost:8787
+sentinel-agent heartbeat
+sentinel-agent attest --sha256 deadbeef...
+sentinel-agent trust
+```
 
-Our mission is to support the entire autonomous systems ecosystem.
+The key file (`sentinel-agent.key.json` by default, override with `--key`) holds the Ed25519 secret hex. Generated automatically on first run.
 
-Identity, attestation, telemetry, and audit are our focus points. Cryptography and openness are baked into the core of everything we do.
+## Library
 
-## Ecosystem
+```rust
+use sentinel_agent::{AgentClient, Claim, ClaimBody, ClaimKind, DeviceIdentity};
 
-- [sentinel-core](https://github.com/SentinelsToday/sentinel-core) -- Trust engine
-- [sentinel-agent](https://github.com/SentinelsToday/sentinel-agent) -- On-device daemon
-- [sentinel-cloud](https://github.com/SentinelsToday/sentinel-cloud) -- Fleet management API
-- [sentinel-chain](https://github.com/SentinelsToday/sentinel-chain) -- Solana attestation
-- [sentinel-sdk](https://github.com/SentinelsToday/sentinel-sdk) -- Multi-language SDK
-- [sentinel-cli](https://github.com/SentinelsToday/sentinel-cli) -- Command-line tool
-- [sentinel-dashboard](https://github.com/SentinelsToday/sentinel-dashboard) -- Web UI
-- [sentinel-firmware](https://github.com/SentinelsToday/sentinel-firmware) -- TPM firmware
-- [sentinel-docs](https://github.com/SentinelsToday/sentinel-docs) -- Documentation
+let id = DeviceIdentity::load_or_create("/var/lib/sentinel-agent.key.json".as_ref())?;
+let body = ClaimBody {
+    kind: ClaimKind::FirmwareHash,
+    subject: id.did().clone(),
+    issued_at: chrono::Utc::now(),
+    nonce: "boot-1".into(),
+    payload: serde_json::json!({"sha256": "..."}),
+};
+let claim = Claim::sign(&id, body)?;
+let client = AgentClient::new("https://api.sentinels.today");
+client.submit_claim(&claim)?;
+```
 
-## Resources
+## Develop
 
-- Website: https://sentinels.today
-- Docs: https://sentinels.today/docs
-- X: @sentinelstoday
+```sh
+cargo fmt --all
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
 
----
+CI runs the same on ubuntu/macos/windows.
 
-Built with care and intent.
+## License
+
+Apache-2.0 — see [LICENSE](./LICENSE).
